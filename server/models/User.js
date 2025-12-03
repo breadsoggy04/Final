@@ -16,7 +16,8 @@ const userSchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     trim: true,
-    match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address']
+    match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address'],
+    index: true // Index for faster lookups
   },
   password_hash: {
     type: String,
@@ -47,9 +48,6 @@ const userSchema = new mongoose.Schema({
 }, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
 });
-
-// Index for faster email lookups
-userSchema.index({ email: 1 });
 
 /**
  * Pre-save middleware to hash password
