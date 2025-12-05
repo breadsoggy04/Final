@@ -89,7 +89,8 @@ app.use((err, req, res, next) => {
 });
 
 // ----- Start Server -----
-const PORT = process.env.PORT || 5001;
+// Default to port 5000 to match README/dev proxy
+const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`

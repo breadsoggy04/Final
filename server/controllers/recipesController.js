@@ -56,7 +56,7 @@ const buildSpoonacularUrl = (endpoint) => {
  * Get API key from environment
  */
 const getApiKey = () => {
-  const apiKey = process.env.RECIPE_API_KEY;
+  const apiKey = process.env.SPOONACULAR_API_KEY || process.env.RECIPE_API_KEY;
   if (!apiKey) {
     throw new Error('SPOONACULAR_API_KEY not configured');
   }

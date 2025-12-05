@@ -1,12 +1,20 @@
 // client/src/services/api.js
 // Centralized API client for ReciPeasy
-// Talks to the Node/Express backend at http://localhost:5001/api
+// Falls back to /api (Vite proxy) but can be overridden via VITE_API_BASE_URL
 
 import axios from 'axios'
 
+const normalizeBaseUrl = (url) => {
+  if (!url) return '/api'
+  const trimmed = url.replace(/\/+$/, '')
+  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`
+}
+
+const API_BASE_URL = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL)
+
 // Base axios instance
 const api = axios.create({
-  baseURL: 'http://localhost:5001/api', // 👈 backend base URL
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },

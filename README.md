@@ -119,6 +119,16 @@ SPOONACULAR_API_KEY=your-spoonacular-api-key
 PORT=5000
 ```
 
+Optionally, configure the client by creating `client/.env`:
+
+```env
+# Point the React app at your API (defaults to /api if omitted)
+VITE_API_BASE_URL=http://localhost:5000/api
+
+# Dev-server proxy target (falls back to the value above without /api)
+VITE_API_PROXY_TARGET=http://localhost:5000
+```
+
 **Getting API Keys:**
 - **MongoDB Atlas**: Create a free cluster at [mongodb.com/atlas](https://mongodb.com/atlas)
 - **Spoonacular**: Get a free API key at [spoonacular.com/food-api](https://spoonacular.com/food-api)
