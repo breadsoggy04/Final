@@ -8,6 +8,7 @@
  */
 
 const axios = require('axios');
+const sampleRecipes = require('../data/sampleRecipes');
 
 // Simple in-memory cache to reduce API calls
 // satisfies: caching layer requirement
@@ -43,6 +44,108 @@ const setCache = (key, data) => {
     data,
     timestamp: Date.now()
   });
+};
+
+/**
+ * Check if a Spoonacular API key is configured
+ */
+const hasConfiguredApiKey = () => Boolean(process.env.SPOONACULAR_API_KEY || process.env.RECIPE_API_KEY);
+
+/**
+ * Normalize a comma-separated ingredient list into searchable tokens
+ */
+const normalizeIngredientTokens = (ingredients) => ingredients
+  .split(',')
+  .map(item => item.trim().toLowerCase())
+  .filter(Boolean);
+
+/**
+ * Determine if an ingredient name matches any user-provided token
+ */
+const matchesToken = (value = '', tokens = []) => {
+  const normalizedValue = value.toLowerCase();
+  return tokens.some(token => 
+    normalizedValue.includes(token) || token.includes(normalizedValue)
+  );
+};
+
+/**
+ * Clone ingredient data to avoid mutating sample dataset
+ */
+const cloneIngredient = (ingredient = {}) => ({
+  name: ingredient.name,
+  original: ingredient.original || ingredient.name || '',
+  amount: ingredient.amount ?? null,
+  unit: ingredient.unit || '',
+  image: ingredient.image || null
+});
+
+/**
+ * Project a sample recipe into the same response shape as Spoonacular
+ */
+const projectSampleRecipe = (recipe, tokens) => {
+  const ingredients = recipe.ingredients || [];
+  const usedIngredients = ingredients
+    .filter(ingredient => matchesToken(ingredient.name || '', tokens))
+    .map(cloneIngredient);
+
+  if (usedIngredients.length === 0) {
+    return null;
+  }
+
+  const missedIngredients = ingredients
+    .filter(ingredient => !matchesToken(ingredient.name || '', tokens))
+    .map(cloneIngredient);
+
+  const totalIngredients = ingredients.length || 1;
+  const matchPercentage = Math.round(
+    (usedIngredients.length / totalIngredients) * 100
+  );
+
+  return {
+    id: recipe.id,
+    title: recipe.title,
+    image: recipe.image,
+    readyInMinutes: recipe.readyInMinutes || 0,
+    proteinGrams: recipe.proteinGrams || 0,
+    calories: recipe.calories || 0,
+    summary: recipe.summary || '',
+    cuisines: recipe.cuisines || [],
+    diets: recipe.diets || [],
+    usedIngredientCount: usedIngredients.length,
+    missedIngredientCount: missedIngredients.length,
+    usedIngredients,
+    missedIngredients,
+    matchPercentage
+  };
+};
+
+/**
+ * Build a ranked response using the offline sample dataset
+ */
+const buildSampleSearchResults = (ingredientList, minProtein, maxTime) => {
+  const tokens = normalizeIngredientTokens(ingredientList);
+  const numericMinProtein = Number(minProtein) || 0;
+  const numericMaxTime = Number(maxTime) || 999;
+
+  const enrichedRecipes = sampleRecipes
+    .map(recipe => projectSampleRecipe(recipe, tokens))
+    .filter(Boolean)
+    .filter(recipe => recipe.proteinGrams >= numericMinProtein)
+    .filter(recipe => numericMaxTime >= 999 ? true : recipe.readyInMinutes <= numericMaxTime);
+
+  const rankedRecipes = rankRecipes(enrichedRecipes);
+
+  return {
+    recipes: rankedRecipes,
+    total: rankedRecipes.length,
+    filters: {
+      ingredients: ingredientList,
+      minProtein: numericMinProtein,
+      maxTime: numericMaxTime
+    },
+    source: 'sample'
+  };
 };
 
 /**
@@ -119,9 +222,12 @@ const rankRecipes = (recipes) => {
  * @access  Public
  */
 const searchRecipes = async (req, res) => {
-  try {
-    const { ingredients, minProtein = 0, maxTime = 999 } = req.body;
+  const { ingredients, minProtein = 0, maxTime = 999 } = req.body;
+  let ingredientList = '';
+  let cacheKey = '';
+  let respondWithSampleResults = null;
 
+  try {
     // Validate ingredients
     if (!ingredients) {
       return res.status(400).json({
@@ -131,7 +237,7 @@ const searchRecipes = async (req, res) => {
     }
 
     // Normalize ingredients to string
-    const ingredientList = Array.isArray(ingredients) 
+    ingredientList = Array.isArray(ingredients) 
       ? ingredients.join(',')
       : ingredients;
 
@@ -143,13 +249,42 @@ const searchRecipes = async (req, res) => {
     }
 
     // Create cache key
-    const cacheKey = `search:${ingredientList}:${minProtein}:${maxTime}`;
+    cacheKey = `search:${ingredientList}:${minProtein}:${maxTime}`;
     
     // Check cache first
     const cachedResult = getFromCache(cacheKey);
     if (cachedResult) {
       console.log('Returning cached search results');
       return res.json(cachedResult);
+    }
+
+    const useSampleEnvFlag = process.env.USE_SAMPLE_RECIPES;
+    const forceSampleData = useSampleEnvFlag === 'true';
+    const allowSampleFallback = useSampleEnvFlag !== 'false';
+    const apiKeyConfigured = hasConfiguredApiKey();
+
+    respondWithSampleResults = () => {
+      if (!ingredientList) {
+        return res.status(500).json({
+          error: 'Search failed',
+          message: 'Unable to build sample data without ingredients'
+        });
+      }
+      const sampleResult = buildSampleSearchResults(ingredientList, minProtein, maxTime);
+      if (cacheKey) {
+        setCache(cacheKey, sampleResult);
+      }
+      return res.json(sampleResult);
+    };
+
+    if (forceSampleData) {
+      console.log('Recipe search: forcing offline dataset due to USE_SAMPLE_RECIPES flag');
+      return respondWithSampleResults();
+    }
+
+    if (!apiKeyConfigured && allowSampleFallback) {
+      console.warn('Recipe search: no API key configured, serving offline dataset');
+      return respondWithSampleResults();
     }
 
     const apiKey = getApiKey();
@@ -247,6 +382,12 @@ const searchRecipes = async (req, res) => {
 
   } catch (error) {
     console.error('Recipe search error:', error.response?.data || error.message);
+
+    const allowSampleFallback = process.env.USE_SAMPLE_RECIPES !== 'false';
+    if (allowSampleFallback && respondWithSampleResults) {
+      console.warn('Recipe search failed, falling back to offline dataset.');
+      return respondWithSampleResults();
+    }
     
     if (error.message === 'SPOONACULAR_API_KEY not configured') {
       return res.status(500).json({
