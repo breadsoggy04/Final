@@ -149,6 +149,62 @@ const buildSampleSearchResults = (ingredientList, minProtein, maxTime) => {
 };
 
 /**
+ * Build a fully detailed recipe response from the offline dataset
+ */
+const buildSampleRecipeDetail = (recipe = {}) => {
+  const nutrients = Array.isArray(recipe.nutrition) && recipe.nutrition.length > 0
+    ? recipe.nutrition.map(nutrient => ({
+        name: nutrient.name,
+        amount: nutrient.amount,
+        unit: nutrient.unit,
+        percentOfDailyNeeds: nutrient.percentOfDailyNeeds ?? 0
+      }))
+    : [
+        { name: 'Calories', amount: recipe.calories || 0, unit: 'kcal', percentOfDailyNeeds: 0 },
+        { name: 'Protein', amount: recipe.proteinGrams || 0, unit: 'g', percentOfDailyNeeds: 0 }
+      ];
+
+  return {
+    id: recipe.id,
+    title: recipe.title,
+    image: recipe.image,
+    readyInMinutes: recipe.readyInMinutes || 0,
+    servings: recipe.servings || 4,
+    sourceUrl: recipe.sourceUrl || null,
+    summary: recipe.summary || '',
+
+    ingredients: (recipe.ingredients || []).map(ingredient => ({
+      id: ingredient.id || null,
+      name: ingredient.name,
+      original: ingredient.original,
+      amount: ingredient.amount,
+      unit: ingredient.unit,
+      image: ingredient.image || null
+    })),
+
+    instructions: recipe.instructions || '',
+    analyzedInstructions: (recipe.steps || []).map((step, index) => ({
+      number: index + 1,
+      step
+    })),
+
+    nutrition: {
+      calories: recipe.calories || 0,
+      protein: recipe.proteinGrams || 0,
+      nutrients
+    },
+
+    diets: recipe.diets || [],
+    dishTypes: recipe.dishTypes || [],
+    cuisines: recipe.cuisines || [],
+    vegetarian: recipe.vegetarian ?? Boolean(recipe.diets?.includes('vegetarian')),
+    vegan: recipe.vegan ?? Boolean(recipe.diets?.includes('vegan')),
+    glutenFree: recipe.glutenFree ?? Boolean(recipe.diets?.includes('gluten free')),
+    dairyFree: recipe.dairyFree ?? Boolean(recipe.diets?.includes('dairy free'))
+  };
+};
+
+/**
  * Build Spoonacular API URL
  */
 const buildSpoonacularUrl = (endpoint) => {
@@ -416,29 +472,55 @@ const searchRecipes = async (req, res) => {
  * @access  Public
  */
 const getRecipeDetail = async (req, res) => {
+  const { id } = req.params;
+  const numericId = Number(id);
+
+  if (!id || Number.isNaN(numericId)) {
+    return res.status(400).json({
+      error: 'Validation error',
+      message: 'Invalid recipe ID'
+    });
+  }
+
+  const cacheKey = `recipe:${numericId}`;
+  const cachedResult = getFromCache(cacheKey);
+  if (cachedResult) {
+    console.log('Returning cached recipe detail');
+    return res.json(cachedResult);
+  }
+
+  const useSampleEnvFlag = process.env.USE_SAMPLE_RECIPES;
+  const forceSampleData = useSampleEnvFlag === 'true';
+  const allowSampleFallback = useSampleEnvFlag !== 'false';
+
+  const respondWithSampleDetail = () => {
+    const sampleRecipe = sampleRecipes.find(recipe => recipe.id === numericId);
+    if (!sampleRecipe) {
+      return false;
+    }
+
+    const result = buildSampleRecipeDetail(sampleRecipe);
+    setCache(cacheKey, result);
+    res.json(result);
+    return true;
+  };
+
+  if (forceSampleData) {
+    if (respondWithSampleDetail()) {
+      console.log('Recipe detail: forcing offline dataset due to USE_SAMPLE_RECIPES flag');
+      return;
+    }
+
+    return res.status(404).json({
+      error: 'Not found',
+      message: 'Recipe not found'
+    });
+  }
+
   try {
-    const { id } = req.params;
-
-    if (!id || isNaN(parseInt(id))) {
-      return res.status(400).json({
-        error: 'Validation error',
-        message: 'Invalid recipe ID'
-      });
-    }
-
-    // Check cache first
-    const cacheKey = `recipe:${id}`;
-    const cachedResult = getFromCache(cacheKey);
-    if (cachedResult) {
-      console.log('Returning cached recipe detail');
-      return res.json(cachedResult);
-    }
-
     const apiKey = getApiKey();
 
-    // Get detailed recipe info with nutrition
-    const url = buildSpoonacularUrl(`/recipes/${id}/information`);
-    
+    const url = buildSpoonacularUrl(`/recipes/${numericId}/information`);
     const response = await axios.get(url, {
       params: {
         apiKey,
@@ -448,7 +530,6 @@ const getRecipeDetail = async (req, res) => {
 
     const recipe = response.data;
 
-    // Format the response
     const result = {
       id: recipe.id,
       title: recipe.title,
@@ -457,8 +538,6 @@ const getRecipeDetail = async (req, res) => {
       servings: recipe.servings || 1,
       sourceUrl: recipe.sourceUrl,
       summary: recipe.summary ? recipe.summary.replace(/<[^>]*>/g, '') : '',
-      
-      // Ingredients
       ingredients: (recipe.extendedIngredients || []).map(ing => ({
         id: ing.id,
         name: ing.name,
@@ -467,15 +546,11 @@ const getRecipeDetail = async (req, res) => {
         unit: ing.unit,
         image: ing.image ? `https://spoonacular.com/cdn/ingredients_100x100/${ing.image}` : null
       })),
-      
-      // Instructions
       instructions: recipe.instructions ? recipe.instructions.replace(/<[^>]*>/g, '') : '',
       analyzedInstructions: recipe.analyzedInstructions?.[0]?.steps?.map(step => ({
         number: step.number,
         step: step.step
       })) || [],
-      
-      // Nutrition
       nutrition: {
         calories: extractCalories(recipe.nutrition),
         protein: extractProtein(recipe.nutrition),
@@ -488,8 +563,6 @@ const getRecipeDetail = async (req, res) => {
             percentOfDailyNeeds: Math.round(n.percentOfDailyNeeds || 0)
           }))
       },
-      
-      // Additional info
       diets: recipe.diets || [],
       dishTypes: recipe.dishTypes || [],
       cuisines: recipe.cuisines || [],
@@ -499,21 +572,31 @@ const getRecipeDetail = async (req, res) => {
       dairyFree: recipe.dairyFree || false
     };
 
-    // Cache the result
     setCache(cacheKey, result);
-
     res.json(result);
 
   } catch (error) {
     console.error('Recipe detail error:', error.response?.data || error.message);
-    
+
     if (error.response?.status === 404) {
       return res.status(404).json({
         error: 'Not found',
         message: 'Recipe not found'
       });
     }
-    
+
+    if (allowSampleFallback && respondWithSampleDetail()) {
+      console.warn('Recipe detail failed, serving offline dataset instead.');
+      return;
+    }
+
+    if (error.message === 'SPOONACULAR_API_KEY not configured') {
+      return res.status(500).json({
+        error: 'Configuration error',
+        message: 'Recipe API is not configured. Please set SPOONACULAR_API_KEY.'
+      });
+    }
+
     res.status(500).json({
       error: 'Failed to fetch recipe',
       message: 'An error occurred while fetching recipe details'
