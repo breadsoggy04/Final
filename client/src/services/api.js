@@ -77,6 +77,11 @@ export const recipesAPI = {
     })
     return res.data
   },
+
+  getDetail: async (recipeId) => {
+    const res = await api.get(`/recipes/${recipeId}`)
+    return res.data
+  },
 }
 
 /**
@@ -91,7 +96,52 @@ export const favoritesAPI = {
     const res = await api.get('/favorites')
     return res.data
   },
-  // You can add add/remove later if needed:
-  // add: async (recipe) => { ... }
-  // remove: async (id) => { ... }
+
+  add: async (recipe = {}) => {
+    const recipeId = recipe.recipe_id ?? recipe.id
+
+    if (!recipeId) {
+      throw new Error('Missing recipe id when adding favorite')
+    }
+
+    const payload = {
+      recipe_id: recipeId,
+      title: recipe.title,
+      image: recipe.image,
+      ready_in_minutes: recipe.ready_in_minutes ?? recipe.readyInMinutes ?? 0,
+      protein_grams: recipe.proteinGrams ?? recipe.protein_grams ?? recipe.nutrition?.protein ?? 0,
+      calories: recipe.calories ?? recipe.nutrition?.calories ?? 0,
+    }
+
+    const res = await api.post('/favorites', payload)
+    return res.data
+  },
+
+  remove: async (recipeId) => {
+    const normalizedId =
+      recipeId?.recipe_id ??
+      recipeId?.id ??
+      recipeId
+
+    if (!normalizedId) {
+      throw new Error('Missing recipe id when removing favorite')
+    }
+
+    const res = await api.delete(`/favorites/${normalizedId}`)
+    return res.data
+  },
+
+  check: async (recipeId) => {
+    const normalizedId =
+      recipeId?.recipe_id ??
+      recipeId?.id ??
+      recipeId
+
+    if (!normalizedId) {
+      throw new Error('Missing recipe id when checking favorite status')
+    }
+
+    const res = await api.get(`/favorites/check/${normalizedId}`)
+    return res.data
+  },
 }
