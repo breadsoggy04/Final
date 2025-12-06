@@ -157,10 +157,4 @@
   margin: 0;
 }
 
-/* Responsive */
-@media (min-width: 768px) {
-  .filter-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-}
 
