@@ -8,6 +8,10 @@
 
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const {
+  isDatabaseReady,
+  databaseUnavailableResponse,
+} = require('../utils/dbStatus');
 
 /**
  * Middleware to protect routes requiring authentication
@@ -49,6 +53,10 @@ const authMiddleware = async (req, res, next) => {
 
     const decoded = jwt.verify(token, jwtSecret);
     
+    if (!isDatabaseReady()) {
+      return res.status(503).json(databaseUnavailableResponse());
+    }
+
     // Find user by ID from token
     const user = await User.findById(decoded.userId);
     
@@ -111,6 +119,11 @@ const optionalAuth = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, jwtSecret);
+
+    if (!isDatabaseReady()) {
+      return next();
+    }
+
     const user = await User.findById(decoded.userId);
     
     if (user) {

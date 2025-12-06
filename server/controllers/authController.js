@@ -9,6 +9,10 @@
 
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const {
+  isDatabaseReady,
+  databaseUnavailableResponse,
+} = require('../utils/dbStatus');
 
 /**
  * Generate JWT token for user
@@ -36,6 +40,10 @@ const generateToken = (userId) => {
  */
 const signup = async (req, res) => {
   try {
+    if (!isDatabaseReady()) {
+      return res.status(503).json(databaseUnavailableResponse());
+    }
+
     const { email, password, default_protein_goal, default_max_time } = req.body;
 
     // Validate required fields
@@ -117,6 +125,10 @@ const signup = async (req, res) => {
  */
 const login = async (req, res) => {
   try {
+    if (!isDatabaseReady()) {
+      return res.status(503).json(databaseUnavailableResponse());
+    }
+
     const { email, password } = req.body;
 
     // Validate required fields
@@ -171,6 +183,10 @@ const login = async (req, res) => {
  */
 const getCurrentUser = async (req, res) => {
   try {
+    if (!isDatabaseReady()) {
+      return res.status(503).json(databaseUnavailableResponse());
+    }
+
     // User is attached to request by authMiddleware
     const user = req.user;
     
@@ -194,6 +210,10 @@ const getCurrentUser = async (req, res) => {
  */
 const updatePreferences = async (req, res) => {
   try {
+    if (!isDatabaseReady()) {
+      return res.status(503).json(databaseUnavailableResponse());
+    }
+
     const { default_protein_goal, default_max_time } = req.body;
     const user = req.user;
 
