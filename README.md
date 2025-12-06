@@ -139,6 +139,16 @@ If you're deploying the frontend as a static site on Render and the backend as a
    - (optional) `VITE_API_PROXY_TARGET=https://recipeasy-api.onrender.com`
 3. Trigger a new build. The frontend will now send requests to the live backend instead of trying to hit `/api` on the static site (which results in missing recipe data).
 
+#### Runtime API base overrides
+
+If you ever need to update the API target without rebuilding the frontend:
+
+- Append `?apiBase=https://your-api.onrender.com/api` to the site URL. The app stores this override in `localStorage` and removes the query parameter for you.
+- To clear the stored override, visit the site with `?clearApiBase=true`.
+- Advanced deployments can also set `window.__RECIPEASY_API_BASE_URL__` before loading the bundle to inject a runtime base URL.
+
+When no custom value is provided in production builds, the client now falls back to `https://recipeasy-api.onrender.com/api`, ensuring the Render demo stays functional even if an environment variable is missed.
+
 **Getting API Keys:**
 - **MongoDB Atlas**: Create a free cluster at [mongodb.com/atlas](https://mongodb.com/atlas)
 - **Spoonacular**: Get a free API key at [spoonacular.com/food-api](https://spoonacular.com/food-api)

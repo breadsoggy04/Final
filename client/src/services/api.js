@@ -4,13 +4,131 @@
 
 import axios from 'axios'
 
+const LOCAL_STORAGE_KEY = 'recipeasy:apiBaseUrl'
+const DEFAULT_RENDER_API_BASE = 'https://recipeasy-api.onrender.com/api'
+const QUERY_PARAM_KEYS = ['apiBase', 'api', 'backend', 'apiUrl']
+const CLEAR_PARAM_KEYS = ['clearApiBase', 'clearApi']
+
+const isBrowser = () => typeof window !== 'undefined'
+
 const normalizeBaseUrl = (url) => {
   if (!url) return '/api'
   const trimmed = url.replace(/\/+$/, '')
   return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`
 }
 
-const API_BASE_URL = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL)
+const safeStorage = {
+  get: () => {
+    if (!isBrowser()) return null
+    try {
+      return window.localStorage.getItem(LOCAL_STORAGE_KEY)
+    } catch {
+      return null
+    }
+  },
+  set: (value) => {
+    if (!isBrowser() || !value) return
+    try {
+      window.localStorage.setItem(LOCAL_STORAGE_KEY, value)
+    } catch {
+      /* ignore quota errors */
+    }
+  },
+  remove: () => {
+    if (!isBrowser()) return
+    try {
+      window.localStorage.removeItem(LOCAL_STORAGE_KEY)
+    } catch {
+      /* ignore */
+    }
+  },
+}
+
+const stripQueryParams = (keys = []) => {
+  if (!isBrowser() || !window.history?.replaceState) return
+  const url = new URL(window.location.href)
+  let mutated = false
+
+  keys.forEach((key) => {
+    if (url.searchParams.has(key)) {
+      url.searchParams.delete(key)
+      mutated = true
+    }
+  })
+
+  if (!mutated) return
+
+  const searchString = url.searchParams.toString()
+  const nextUrl = `${url.pathname}${searchString ? `?${searchString}` : ''}${url.hash}`
+  window.history.replaceState({}, '', nextUrl)
+}
+
+const readQueryOverride = () => {
+  if (!isBrowser()) return null
+  const url = new URL(window.location.href)
+  for (const key of QUERY_PARAM_KEYS) {
+    const value = url.searchParams.get(key)
+    if (value) {
+      return value
+    }
+  }
+  return null
+}
+
+const shouldClearStoredOverride = () => {
+  if (!isBrowser()) return false
+  const url = new URL(window.location.href)
+  return CLEAR_PARAM_KEYS.some((key) => url.searchParams.has(key))
+}
+
+const resolveApiBaseUrl = () => {
+  if (isBrowser() && shouldClearStoredOverride()) {
+    safeStorage.remove()
+    stripQueryParams(CLEAR_PARAM_KEYS)
+  }
+
+  if (isBrowser()) {
+    const queryOverride = readQueryOverride()
+    if (queryOverride) {
+      const normalized = normalizeBaseUrl(queryOverride)
+      safeStorage.set(normalized)
+      stripQueryParams(QUERY_PARAM_KEYS)
+      console.info(`[api] Using API base override from query: ${normalized}`)
+      return normalized
+    }
+  }
+
+  if (import.meta.env.VITE_API_BASE_URL) {
+    const normalized = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL)
+    console.info(`[api] Using API base from VITE_API_BASE_URL: ${normalized}`)
+    return normalized
+  }
+
+  if (isBrowser() && window.__RECIPEASY_API_BASE_URL__) {
+    const normalized = normalizeBaseUrl(window.__RECIPEASY_API_BASE_URL__)
+    console.info('[api] Using API base from window.__RECIPEASY_API_BASE_URL__')
+    return normalized
+  }
+
+  if (isBrowser()) {
+    const stored = safeStorage.get()
+    if (stored) {
+      const normalized = normalizeBaseUrl(stored)
+      console.info(`[api] Using API base from stored override: ${normalized}`)
+      return normalized
+    }
+  }
+
+  if (import.meta.env.PROD) {
+    console.info(`[api] Falling back to Render default API base: ${DEFAULT_RENDER_API_BASE}`)
+    return DEFAULT_RENDER_API_BASE
+  }
+
+  console.info('[api] Falling back to local /api proxy')
+  return '/api'
+}
+
+const API_BASE_URL = resolveApiBaseUrl()
 
 // Base axios instance
 const api = axios.create({
@@ -29,6 +147,20 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+const ensureJsonResponse = (response, label) => {
+  const data = response?.data
+
+  if (typeof data === 'string') {
+    throw new Error(
+      `Unexpected response from ${label}. ` +
+      'Received text/HTML instead of JSON. ' +
+      `Double-check that your API base URL (${API_BASE_URL}) points to the backend service.`,
+    )
+  }
+
+  return data
+}
+
 /**
  * Auth API
  * Matches backend routes under /api/auth
@@ -42,22 +174,22 @@ api.interceptors.request.use((config) => {
 export const authAPI = {
   login: async (email, password) => {
     const res = await api.post('/auth/login', { email, password })
-    return res.data
+    return ensureJsonResponse(res, 'auth/login')
   },
 
   signup: async (email, password) => {
     const res = await api.post('/auth/signup', { email, password })
-    return res.data
+    return ensureJsonResponse(res, 'auth/signup')
   },
 
   getCurrentUser: async () => {
     const res = await api.get('/auth/me')
-    return res.data
+    return ensureJsonResponse(res, 'auth/me')
   },
 
   updatePreferences: async (preferences) => {
     const res = await api.put('/auth/preferences', preferences)
-    return res.data
+    return ensureJsonResponse(res, 'auth/preferences')
   },
 }
 
@@ -75,12 +207,12 @@ export const recipesAPI = {
       minProtein,
       maxTime,
     })
-    return res.data
+    return ensureJsonResponse(res, 'recipes/search')
   },
 
   getDetail: async (recipeId) => {
     const res = await api.get(`/recipes/${recipeId}`)
-    return res.data
+    return ensureJsonResponse(res, 'recipes/detail')
   },
 }
 
@@ -94,7 +226,7 @@ export const recipesAPI = {
 export const favoritesAPI = {
   getAll: async () => {
     const res = await api.get('/favorites')
-    return res.data
+    return ensureJsonResponse(res, 'favorites/list')
   },
 
   add: async (recipe = {}) => {
@@ -114,7 +246,7 @@ export const favoritesAPI = {
     }
 
     const res = await api.post('/favorites', payload)
-    return res.data
+    return ensureJsonResponse(res, 'favorites/add')
   },
 
   remove: async (recipeId) => {
@@ -128,7 +260,7 @@ export const favoritesAPI = {
     }
 
     const res = await api.delete(`/favorites/${normalizedId}`)
-    return res.data
+    return ensureJsonResponse(res, 'favorites/remove')
   },
 
   check: async (recipeId) => {
@@ -142,6 +274,6 @@ export const favoritesAPI = {
     }
 
     const res = await api.get(`/favorites/check/${normalizedId}`)
-    return res.data
+    return ensureJsonResponse(res, 'favorites/check')
   },
 }

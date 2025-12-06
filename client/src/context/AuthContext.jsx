@@ -87,11 +87,14 @@ export const AuthProvider = ({ children }) => {
     setError(null)
     try {
       const response = await authAPI.login(email, password)
+      if (!response?.token || !response?.user) {
+        throw new Error('Invalid auth response. Please verify the API service URL.')
+      }
       localStorage.setItem('token', response.token)
       setUser(response.user)
       return response
     } catch (err) {
-      const message = err.response?.data?.message || 'Login failed'
+      const message = err.response?.data?.message || err.message || 'Login failed'
       setError(message)
       throw new Error(message)
     }
@@ -106,11 +109,14 @@ export const AuthProvider = ({ children }) => {
     setError(null)
     try {
       const response = await authAPI.signup(email, password)
+      if (!response?.token || !response?.user) {
+        throw new Error('Invalid signup response. Please verify the API service URL.')
+      }
       localStorage.setItem('token', response.token)
       setUser(response.user)
       return response
     } catch (err) {
-      const message = err.response?.data?.message || 'Signup failed'
+      const message = err.response?.data?.message || err.message || 'Signup failed'
       setError(message)
       throw new Error(message)
     }
