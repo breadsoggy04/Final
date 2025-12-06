@@ -7,6 +7,10 @@
  */
 
 const Favorite = require('../models/Favorite');
+const {
+  isDatabaseReady,
+  databaseUnavailableResponse,
+} = require('../utils/dbStatus');
 
 /**
  * @desc    Get all favorites for the current user
@@ -15,6 +19,10 @@ const Favorite = require('../models/Favorite');
  */
 const getFavorites = async (req, res) => {
   try {
+    if (!isDatabaseReady()) {
+      return res.status(503).json(databaseUnavailableResponse());
+    }
+
     const userId = req.userId;
     
     const favorites = await Favorite.getUserFavorites(userId);
@@ -40,6 +48,10 @@ const getFavorites = async (req, res) => {
  */
 const addFavorite = async (req, res) => {
   try {
+    if (!isDatabaseReady()) {
+      return res.status(503).json(databaseUnavailableResponse());
+    }
+
     const userId = req.userId;
     const { 
       recipe_id, 
@@ -113,6 +125,10 @@ const addFavorite = async (req, res) => {
  */
 const checkFavorite = async (req, res) => {
   try {
+    if (!isDatabaseReady()) {
+      return res.status(503).json(databaseUnavailableResponse());
+    }
+
     const userId = req.userId;
     const { recipeId } = req.params;
 
@@ -146,6 +162,10 @@ const checkFavorite = async (req, res) => {
  */
 const removeFavorite = async (req, res) => {
   try {
+    if (!isDatabaseReady()) {
+      return res.status(503).json(databaseUnavailableResponse());
+    }
+
     const userId = req.userId;
     const { recipeId } = req.params;
 
