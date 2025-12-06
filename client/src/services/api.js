@@ -8,6 +8,7 @@ const LOCAL_STORAGE_KEY = 'recipeasy:apiBaseUrl'
 const DEFAULT_RENDER_API_BASE = 'https://recipeasy-api.onrender.com/api'
 const QUERY_PARAM_KEYS = ['apiBase', 'api', 'backend', 'apiUrl']
 const CLEAR_PARAM_KEYS = ['clearApiBase', 'clearApi']
+const DEFAULT_TIMEOUT_MS = 15000
 
 const isBrowser = () => typeof window !== 'undefined'
 
@@ -129,6 +130,20 @@ const resolveApiBaseUrl = () => {
 }
 
 const API_BASE_URL = resolveApiBaseUrl()
+const API_TIMEOUT_MS =
+  Number(import.meta.env.VITE_API_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS
+
+const resolveReadableBaseUrl = () => {
+  if (API_BASE_URL !== '/api') {
+    return API_BASE_URL
+  }
+
+  if (typeof window === 'undefined' || !window.location?.origin) {
+    return '/api'
+  }
+
+  return `${window.location.origin}/api`
+}
 
 // Base axios instance
 const api = axios.create({
@@ -136,6 +151,8 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: API_TIMEOUT_MS,
+  timeoutErrorMessage: `API request timed out after ${API_TIMEOUT_MS}ms`,
 })
 
 // Attach JWT token (if present) to every request
@@ -146,6 +163,34 @@ api.interceptors.request.use((config) => {
   }
   return config
 })
+
+// Surface clearer messaging when the API cannot be reached at all
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const isTimeout = error.code === 'ECONNABORTED'
+    const isNetworkError =
+      error.message === 'Network Error' || (!error.response && !error.status)
+
+    if (isTimeout || isNetworkError || !error.response) {
+      const fallbackMessage =
+        `Unable to reach the ReciPeasy API at ${resolveReadableBaseUrl()}. ` +
+        'Please make sure the backend is running or configure VITE_API_BASE_URL.'
+
+      error.message = fallbackMessage
+
+      if (!error.response) {
+        error.response = { data: { message: fallbackMessage } }
+      } else if (!error.response.data) {
+        error.response.data = { message: fallbackMessage }
+      } else if (!error.response.data.message) {
+        error.response.data.message = fallbackMessage
+      }
+    }
+
+    return Promise.reject(error)
+  }
+)
 
 const ensureJsonResponse = (response, label) => {
   const data = response?.data
