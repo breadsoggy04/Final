@@ -129,6 +129,16 @@ VITE_API_BASE_URL=http://localhost:5000/api
 VITE_API_PROXY_TARGET=http://localhost:5000
 ```
 
+#### Render Deployment Checklist
+
+If you're deploying the frontend as a static site on Render and the backend as a separate web service:
+
+1. Deploy the Express server (`/server`) as a **Web Service** and note the public URL (for example `https://recipeasy-api.onrender.com`).
+2. Deploy the React app (`/client`) as a **Static Site** and add the following environment variables in the Render dashboard before building:
+   - `VITE_API_BASE_URL=https://recipeasy-api.onrender.com/api`
+   - (optional) `VITE_API_PROXY_TARGET=https://recipeasy-api.onrender.com`
+3. Trigger a new build. The frontend will now send requests to the live backend instead of trying to hit `/api` on the static site (which results in missing recipe data).
+
 **Getting API Keys:**
 - **MongoDB Atlas**: Create a free cluster at [mongodb.com/atlas](https://mongodb.com/atlas)
 - **Spoonacular**: Get a free API key at [spoonacular.com/food-api](https://spoonacular.com/food-api)
