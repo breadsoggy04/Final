@@ -109,9 +109,6 @@ Create a `.env` file in the `/server` directory:
 # MongoDB Atlas Connection
 MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/recipeasy?retryWrites=true&w=majority
 
-# Optional: disable auto in-memory fallback (defaults to true)
-# ALLOW_IN_MEMORY_DB=false
-
 # Frontend origins allowed by CORS (comma separated)
 CLIENT_URLS=https://your-frontend.onrender.com,http://localhost:5173
 
@@ -127,8 +124,6 @@ SPOONACULAR_API_KEY=your-spoonacular-api-key
 # Server Port
 PORT=5000
 ```
-
-> 💡 **No MongoDB URI handy?** Leave `MONGODB_URI` unset while developing or during demos and the server will automatically spin up an isolated in-memory MongoDB instance. Data resets on restart. Set `ALLOW_IN_MEMORY_DB=false` if you prefer the server to exit instead of using the fallback.
 
 > 🔐 **Deploying the frontend?** Make sure the backend knows which origins are allowed. Set `CLIENT_URLS` to a comma-separated list (for example `CLIENT_URLS=https://final-jcgw.onrender.com,http://localhost:5173`). Render preview URLs or additional domains can be added the same way. Only turn on `ALLOW_ALL_CLIENTS=true` for debugging.
 
