@@ -109,6 +109,12 @@ Create a `.env` file in the `/server` directory:
 # MongoDB Atlas Connection
 MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/recipeasy?retryWrites=true&w=majority
 
+# Frontend origins allowed by CORS (comma separated)
+CLIENT_URLS=https://your-frontend.onrender.com,http://localhost:5173
+
+# Optional: allow any origin (not recommended for production)
+# ALLOW_ALL_CLIENTS=false
+
 # JWT Secret (use a strong random string)
 JWT_SECRET=your-super-secret-jwt-key-change-this
 
@@ -118,6 +124,8 @@ SPOONACULAR_API_KEY=your-spoonacular-api-key
 # Server Port
 PORT=5000
 ```
+
+> 🔐 **Deploying the frontend?** Make sure the backend knows which origins are allowed. Set `CLIENT_URLS` to a comma-separated list (for example `CLIENT_URLS=https://final-jcgw.onrender.com,http://localhost:5173`). Render preview URLs or additional domains can be added the same way. Only turn on `ALLOW_ALL_CLIENTS=true` for debugging.
 
 Optionally, configure the client by creating `client/.env`:
 
