@@ -29,10 +29,31 @@ connectDB();
 
 // ----- Global Middleware -----
 
-// CORS – allow frontend on Vite dev server
+const parseAllowedOrigins = () => {
+  const rawOrigins = process.env.CLIENT_URLS || process.env.CLIENT_URL || '';
+  const parsed = rawOrigins
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  if (parsed.length === 0) {
+    return ['http://localhost:5173'];
+  }
+
+  return parsed;
+};
+
+const allowedOrigins = parseAllowedOrigins();
+const allowAllOrigins = process.env.ALLOW_ALL_CLIENTS === 'true';
+
+if (process.env.NODE_ENV !== 'production') {
+  console.log('[cors] allowed origins:', allowAllOrigins ? 'ALL' : allowedOrigins.join(', '));
+}
+
+// CORS – allow configured frontend origins (comma-separated CLIENT_URLS)
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: allowAllOrigins ? true : allowedOrigins,
     credentials: true,
   })
 );
